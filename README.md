@@ -87,3 +87,101 @@ This is the first movement prototype of the **Varood School working model**. Fut
 ## License
 
 Educational and robotics experimentation project.
+
+
+---
+
+# Raspberry Pi Road-Colour Detection Prototype
+
+This is a separate Raspberry Pi 3 prototype for testing camera-based red-colour detection. It does not replace the ESP8266 car-movement prototype above.
+
+## Hardware and software
+
+- Raspberry Pi 3
+- Logitech C925e USB webcam (or another compatible USB webcam)
+- Python 3
+- OpenCV (`cv2`)
+- NumPy
+
+> **Current scope:** This prototype detects red-coloured regions. It does not yet identify real road cracks. Road cracks are not normally red; a trained crack-detection model or another image-processing approach will be needed for real road-crack recognition.
+
+## Features
+
+- Continuously reads webcam frames in the background.
+- Does not open a live preview window.
+- Converts frames from BGR to HSV colour space.
+- Uses two HSV ranges because red wraps around the hue scale.
+- Filters small noise and finds red-region contours.
+- Draws a green bounding rectangle and a `RED DETECTED` label around sufficiently large red regions.
+- Saves one annotated photo when red first appears, rather than saving every video frame.
+- Saves photos in `~/roadbot/photos/`.
+- Stops with `Ctrl+C`.
+
+## Check the camera
+
+List video devices:
+
+```bash
+ls /dev/video*
+```
+
+Install camera utilities and list camera names/devices:
+
+```bash
+sudo apt install v4l-utils -y
+v4l2-ctl --list-devices
+```
+
+The Logitech C925e was detected during development; `/dev/video0` successfully returned a frame. Device numbers may differ on other systems.
+
+## Install dependencies
+
+```bash
+sudo apt update
+sudo apt install python3-opencv python3-numpy
+```
+
+Check OpenCV:
+
+```bash
+python3 -c "import cv2; print(cv2.__version__)"
+```
+
+## Run the detector
+
+Create the output folder:
+
+```bash
+mkdir -p ~/roadbot/photos
+```
+
+Copy `raspberry_pi/red_detect.py` from this repository to `~/roadbot/red_detect.py`, then run:
+
+```bash
+python3 ~/roadbot/red_detect.py
+```
+
+Show a red paper or red tape to the webcam. When red is detected, the terminal prints the saved image path. To list saved photos:
+
+```bash
+ls -lh ~/roadbot/photos/
+```
+
+Press `Ctrl+C` to stop the detector.
+
+## Configuration
+
+- Camera device: `/dev/video0`
+- Minimum contour area: `500` pixels
+- HSV red ranges: `[0, 100, 100]–[10, 255, 255]` and `[160, 100, 100]–[179, 255, 255]`
+- Output folder: `~/roadbot/photos/`
+
+Lighting, camera settings, distance, and object size affect detection. Adjust `MIN_RED_AREA` and the HSV limits if false detections occur or red objects are missed.
+
+## Current limitations and planned work
+
+- NEO-6M GPS integration is not included in this script yet.
+- Automatic website upload is not included yet.
+- GitHub Pages is a static website and cannot by itself securely receive uploads or store uploaded photos. A backend/storage service (for example, Supabase) is needed for photo and GPS reports.
+- Red-colour detection is a test proxy, not confirmed road-crack detection.
+- Startup-on-boot configuration has not been added yet.
