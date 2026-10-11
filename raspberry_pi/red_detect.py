@@ -7,18 +7,18 @@ import requests
 from datetime import datetime, timezone
 
 # ==================================================
-# CAMERA AND OUTPUT SETTINGS
+# CAMERA AND PHOTO SETTINGS
 # ==================================================
 CAMERA = "/dev/video0"
 PHOTO_DIR = os.path.expanduser("~/roadbot/photos")
 
-# Fixed example coordinates until a live GPS module is connected.
+# Fixed example coordinates until live GPS is connected.
 # These are NOT live GPS readings.
 LATITUDE = 10.7735
 LONGITUDE = 76.3775
 
 # ==================================================
-# SUPABASE UPLOAD SETTINGS
+# SUPABASE SETTINGS
 # ==================================================
 SUPABASE_UPLOAD_URL = (
     "https://iglcowsagtkasxwmsqvt.supabase.co/"
@@ -29,18 +29,15 @@ UPLOAD_RETRY_SECONDS = 10
 REQUEST_TIMEOUT = 30
 
 # ==================================================
-# RED-REGION DETECTION AND TRACKING
+# DETECTION AND TRACKING SETTINGS
 # ==================================================
 MIN_RED_AREA = 500
 BOX_THICKNESS = 2
 STABLE_FRAMES = 3
 MATCH_DISTANCE = 140
+TRACK_TIMEOUT = 10.0
 
-# Keep a temporarily missing region's tracking record this long.
-# If the same region flickers/disappears briefly, it should not
-# immediately create a second photo.
-TRACK_TIMEOUT = 15.0
-
+# Important: this is red-colour detection, not trained AI crack detection.
 LABEL = "CRACK DETECTED"
 
 os.makedirs(PHOTO_DIR, exist_ok=True)
@@ -64,16 +61,29 @@ def load_robot_key():
                         if key:
                             return key.strip()
         except OSError as error:
-            print("WARNING: Cannot read robot key:", error)
+            print("WARNING: Cannot read key file:", error)
 
     return os.environ.get("ROBOT_UPLOAD_KEY", "").strip()
 
 
 ROBOT_UPLOAD_KEY = load_robot_key()
 
+# ==================================================
+# RED COLOUR RANGE (HSV)
+# Detects red regions, not actual road cracks.
+# ==================================================
+lower1 = np.array([0, 100, 100])
+upper1 = np.array([10, 255, 255])
+lower2 = np.array([160, 100, 100])
+upper2 = np.array([179, 255, 255])
+kernel = np.ones((5, 5), np.uint8)
+
+tracks = []
+next_id = 1
+
 
 def save_json_report(photo_path, timestamp):
-    """Write one JSON sidecar report for the captured photo."""
+    """Save a JSON sidecar report for a captured region."""
     report = {
         "detection": LABEL,
         "latitude": LATITUDE,
@@ -86,13 +96,13 @@ def save_json_report(photo_path, timestamp):
     try:
         with open(report_path, "w", encoding="utf-8") as file:
             json.dump(report, file, indent=4)
-        print("JSON report saved:", report_path)
+        print("JSON saved:", report_path)
     except OSError as error:
         print("JSON SAVE ERROR:", error)
 
 
 def upload_report(photo_path, timestamp):
-    """Upload an already-saved photo. Never capture a new photo on retry."""
+    """Upload an already-saved photo. Retries never capture a new photo."""
     if not ROBOT_UPLOAD_KEY:
         print("UPLOAD ERROR: Robot key is missing.")
         return False
@@ -119,12 +129,8 @@ def upload_report(photo_path, timestamp):
             )
 
         if response.ok:
-            try:
-                result = response.json()
-            except ValueError:
-                result = response.text
             print("UPLOAD SUCCESS:", photo_path)
-            print("Supabase response:", result)
+            print("Server response:", response.text[:500])
             return True
 
         print("UPLOAD FAILED:", response.status_code)
@@ -144,42 +150,31 @@ def upload_report(photo_path, timestamp):
 # ==================================================
 camera = cv2.VideoCapture(CAMERA)
 if not camera.isOpened():
-    print("ERROR: Camera could not open:", CAMERA)
+    print("ERROR: Cannot open camera:", CAMERA)
     raise SystemExit(1)
 
-lower1 = np.array([0, 100, 100])
-upper1 = np.array([10, 255, 255])
-lower2 = np.array([160, 100, 100])
-upper2 = np.array([179, 255, 255])
-kernel = np.ones((5, 5), np.uint8)
-
-tracks = []
-next_id = 1
-
 print("\n======================================")
-print("          ROADBOT CAMERA SYSTEM")
+print("          ROADBOT SYSTEM")
 print("======================================")
 print("Camera:", CAMERA)
-print("Photo folder:", PHOTO_DIR)
-print("Fixed coordinates:", LATITUDE, LONGITUDE)
-print("Robot upload key:", "Loaded" if ROBOT_UPLOAD_KEY else "MISSING")
-print("Detection: red-colour regions (not AI crack recognition)")
-print("Capture rule: one photo per tracked region")
-print("Press Q to quit, or Ctrl+C in the terminal.")
+print("Photos:", PHOTO_DIR)
+print("Location (fixed, not live GPS):", LATITUDE, LONGITUDE)
+print("Upload key:", "Loaded" if ROBOT_UPLOAD_KEY else "MISSING")
+print("Mode: ONE PHOTO PER TRACKED RED REGION")
+print("Detection is colour-based, not AI crack recognition.")
+print("Press Q to quit.")
 print("======================================\n")
 
 try:
     while True:
         ok, frame = camera.read()
+
         if not ok:
-            print("WARNING: Could not read camera frame.")
+            print("WARNING: Camera frame unavailable.")
             time.sleep(0.1)
             continue
 
         now = time.time()
-
-        # Keep an unmodified frame; draw annotations on the display frame.
-        original_frame = frame.copy()
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
         mask = cv2.bitwise_or(
@@ -196,14 +191,15 @@ try:
         for contour in contours:
             if cv2.contourArea(contour) < MIN_RED_AREA:
                 continue
+
             x, y, w, h = cv2.boundingRect(contour)
             detections.append({
                 "box": (x, y, w, h),
                 "center": (x + w // 2, y + h // 2)
             })
 
-        # Expire inactive tracks after the timeout, but keep a track if its
-        # photo still needs uploading. Failed uploads retry the SAME photo.
+        # Keep inactive tracks briefly to avoid duplicates from flicker.
+        # Keep pending uploads until the saved photo has uploaded.
         tracks = [
             track for track in tracks
             if (
@@ -218,9 +214,9 @@ try:
         used_ids = set()
         new_tracks = []
 
-        for det in detections:
-            x, y, w, h = det["box"]
-            cx, cy = det["center"]
+        for detection in detections:
+            x, y, w, h = detection["box"]
+            cx, cy = detection["center"]
 
             best_track = None
             best_distance = MATCH_DISTANCE
@@ -257,7 +253,7 @@ try:
                 new_tracks.append(track)
                 used_ids.add(track["id"])
 
-            # Draw a green rectangle and label on the live preview.
+            # Draw rectangle and label on the live preview.
             cv2.rectangle(
                 frame, (x, y), (x + w, y + h),
                 (0, 255, 0), BOX_THICKNESS
@@ -268,11 +264,8 @@ try:
                 (0, 255, 0), 1, cv2.LINE_AA
             )
 
-            # Save once only after the same region is stable.
-            if (
-                track["count"] >= STABLE_FRAMES
-                and track["photo_path"] is None
-            ):
+            # Capture only once after the same region is stable.
+            if track["count"] >= STABLE_FRAMES and track["photo_path"] is None:
                 timestamp = datetime.now(timezone.utc).isoformat()
                 filename = os.path.join(
                     PHOTO_DIR,
@@ -280,36 +273,32 @@ try:
                     + ".jpg"
                 )
 
-                # Save annotated frame so the box and label are in the photo.
+                # Save the annotated image, including box and label.
                 if cv2.imwrite(filename, frame):
                     track["photo_path"] = filename
                     track["timestamp"] = timestamp
-                    track["next_upload_attempt"] = 0
                     save_json_report(filename, timestamp)
 
-                    print("\nNEW RED REGION CAPTURED")
+                    print("\nNEW REGION CAPTURED")
                     print("Track ID:", track["id"])
                     print("Photo:", filename)
                     print("Location (fixed, not live GPS):", LATITUDE, LONGITUDE)
                     print("Timestamp:", timestamp)
-                    print("This track will not capture another photo.")
-
+                    print("This track will not create another photo.")
                 else:
                     print("PHOTO SAVE ERROR:", filename)
 
         tracks.extend(new_tracks)
 
-        # Retry uploading the saved photo, not taking another photo.
+        # Retry uploads using the same saved photo; never recapture on retry.
         for track in tracks:
             if (
                 track["photo_path"] is not None
                 and not track["uploaded"]
                 and now >= track["next_upload_attempt"]
             ):
-                success = upload_report(
-                    track["photo_path"],
-                    track["timestamp"]
-                )
+                success = upload_report(track["photo_path"], track["timestamp"])
+
                 if success:
                     track["uploaded"] = True
                     print("Track uploaded:", track["id"])
@@ -317,20 +306,17 @@ try:
                     track["next_upload_attempt"] = (
                         time.time() + UPLOAD_RETRY_SECONDS
                     )
-                    print(
-                        "Will retry the same photo in",
-                        UPLOAD_RETRY_SECONDS,
-                        "seconds."
-                    )
+                    print("Will retry upload in", UPLOAD_RETRY_SECONDS, "seconds.")
 
         cv2.imshow("RoadBot - Crack Detection", frame)
+
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
         time.sleep(0.03)
 
 except KeyboardInterrupt:
-    print("\nDetection stopped by user.")
+    print("\nRoadBot stopped by user.")
 
 finally:
     camera.release()
