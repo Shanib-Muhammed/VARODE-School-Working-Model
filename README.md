@@ -1,29 +1,46 @@
-# 🚗 ESP8266 Autonomous Slow Car
+# Varood School Working Model
 
-A simple autonomous car prototype using an **ESP8266 NodeMCU**, **L298N motor driver**, **2 DC motors**, and an **HC-SR04 ultrasonic sensor**.
+This repository contains two related but separate prototypes:
 
-The car moves forward slowly and continuously checks the distance in front of it. When an obstacle gets closer, the car gradually reduces its speed. When the obstacle reaches the configured stop distance, the car stops.
+1. **ESP8266 slow car** — drives two DC motors through an L298N and uses an HC-SR04 ultrasonic sensor to stop near an obstacle.
+2. **Raspberry Pi RoadBot camera prototype** — detects red-coloured regions, saves one photo per tracked region, writes a JSON report, and uploads the saved photo and coordinates to a Supabase Edge Function.
 
-## Components
+> **Important limitation:** the current Raspberry Pi program detects the colour red. It does **not** recognise real road cracks using AI. The coordinates are hard-coded example coordinates until a live GPS receiver is connected. Do not present these as live GPS readings.
+
+---
+
+## Contents
+
+- [ESP8266 car prototype](#esp8266-car-prototype)
+- [Raspberry Pi RoadBot](#raspberry-pi-roadbot)
+- [Hardware needed for RoadBot](#hardware-needed-for-roadbot)
+- [Install Raspberry Pi dependencies](#install-raspberry-pi-dependencies)
+- [Camera check](#camera-check)
+- [Configure the Supabase robot key](#configure-the-supabase-robot-key)
+- [Copy the script from GitHub to the Pi](#copy-the-script-from-github-to-the-pi)
+- [Run RoadBot](#run-roadbot)
+- [What the program does](#what-the-program-does)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [Safety and limitations](#safety-and-limitations)
+
+---
+
+## ESP8266 car prototype
+
+### Hardware
+
 - NodeMCU ESP8266
-- L298N Motor Driver
-- 2 × DC motors
+- L298N motor driver
+- 2 DC motors and chassis
 - HC-SR04 ultrasonic sensor
-- Suitable battery/power supply
-- Robot chassis and wheels
+- Suitable battery and regulated power supply
 
-## Features
-- Slow forward movement
-- Continuous front-distance measurement
-- Automatic speed reduction near obstacles
-- Automatic stop at the configured distance
-- Serial Monitor status output
+### Pin connections
 
-## Pin Connections
+**L298N → ESP8266**
 
-### L298N → ESP8266
-
-| L298N | ESP8266 |
+| L298N pin | ESP8266 pin |
 |---|---|
 | ENA | D3 |
 | IN1 | D1 |
@@ -32,156 +49,309 @@ The car moves forward slowly and continuously checks the distance in front of it
 | IN3 | D5 |
 | IN4 | D6 |
 
-### HC-SR04 → ESP8266
+**HC-SR04 → ESP8266**
 
-| HC-SR04 | ESP8266 |
+| HC-SR04 pin | Connection |
 |---|---|
 | TRIG | D7 |
-| ECHO | D8 |
+| ECHO | D8 through a voltage divider or level shifter |
 | GND | GND |
-| VCC | 5V supply |
+| VCC | Suitable 5 V supply |
 
-> ⚠️ **Important:** HC-SR04 ECHO can output 5V, while ESP8266 GPIO uses 3.3V logic. Use a voltage divider/level shifter on ECHO before connecting it to the ESP8266.
+> **Electrical warning:** HC-SR04 ECHO can output 5 V, but ESP8266 GPIO is 3.3 V tolerant. Use a voltage divider or level shifter. Share ground between the ESP8266 and motor driver. Do not connect separate positive power rails together unless the power design specifically supports it.
 
-## Movement Logic
-
-Current settings:
-
-```cpp
-const int SAFE_DISTANCE = 15;
-const int STOP_DISTANCE = 8;
-const int MAX_SPEED = 70;
-const int MIN_SPEED = 25;
-```
-
-- **More than 15 cm:** car moves forward at MAX_SPEED.
-- **15 cm to 8 cm:** car gradually slows down.
-- **8 cm or less:** car stops.
-- **Invalid ultrasonic reading:** car stops for safety.
-
-## Serial Monitor
-
-Use **115200 baud**.
-
-## Arduino IDE
-
-- **Board:** NodeMCU 1.0 (ESP-12E Module)
-- **Serial Monitor:** 115200 baud
-- **Sketch:** `esp8266_autonomous_car.ino`
-
-## Power and Ground
-
-ESP8266 and L298N must share a common ground:
-
-```
-ESP8266 GND ───── L298N GND
-Battery − ─────── L298N GND
-```
-
-Do **not** connect different positive power supplies together.
-
-## Project Status
-
-This is the first movement prototype of the **Varood School working model**. Future versions can add Raspberry Pi vision, road-crack detection, GPS, image capture, and a web dashboard.
-
-## License
-
-Educational and robotics experimentation project.
-
+The Arduino sketch is `esp8266_autonomous_car.ino`. Open it in Arduino IDE, select **NodeMCU 1.0 (ESP-12E Module)**, upload it, and use Serial Monitor at **115200 baud**.
 
 ---
 
-# Raspberry Pi Road-Colour Detection Prototype
+## Raspberry Pi RoadBot
 
-This is a separate Raspberry Pi 3 prototype for testing camera-based red-colour detection. It does not replace the ESP8266 car-movement prototype above.
+### Hardware needed for RoadBot
 
-## Hardware and software
+- Raspberry Pi 3 with Raspberry Pi OS
+- USB webcam compatible with Linux/V4L2 (the script defaults to `/dev/video0`)
+- Internet connection for Supabase upload
+- Power supply suitable for the Pi
+- Optional future addition: a supported GPS module for live coordinates
 
-- Raspberry Pi 3
-- Logitech C925e USB webcam (or another compatible USB webcam)
-- Python 3
-- OpenCV (`cv2`)
-- NumPy
+A monitor, keyboard, and mouse are optional if you connect to the Pi over SSH.
 
-> **Current scope:** This prototype detects red-coloured regions. It does not yet identify real road cracks. Road cracks are not normally red; a trained crack-detection model or another image-processing approach will be needed for real road-crack recognition.
+### What it does
 
-## Features
+1. Opens the webcam at `/dev/video0`.
+2. Converts each frame from BGR to HSV colour space.
+3. Checks two HSV ranges to detect red pixels.
+4. Removes small noise and ignores contours smaller than `MIN_RED_AREA`.
+5. Tracks each detected region between frames using its centre point.
+6. Waits until a region is seen for at least `STABLE_FRAMES` frames.
+7. Saves **one annotated JPEG per tracked region** in `~/roadbot/photos/`.
+8. Writes a matching JSON report beside the image.
+9. Uploads the already-saved photo, detection label, timestamp, and configured coordinates to the Supabase Edge Function.
+10. If upload fails, retries the **same saved photo** after the configured delay instead of taking a new photo.
+11. Shows a live preview with a green rectangle and the label `CRACK DETECTED`. Press **Q** in the preview window to exit, or press **Ctrl+C** in the terminal.
 
-- Continuously reads webcam frames in the background.
-- Does not open a live preview window.
-- Converts frames from BGR to HSV colour space.
-- Uses two HSV ranges because red wraps around the hue scale.
-- Filters small noise and finds red-region contours.
-- Draws a green bounding rectangle and a `RED DETECTED` label around sufficiently large red regions.
-- Saves one annotated photo when red first appears, rather than saving every video frame.
-- Saves photos in `~/roadbot/photos/`.
-- Stops with `Ctrl+C`.
+The label is only a project label; the current algorithm is colour detection, not a trained crack classifier.
 
-## Check the camera
+---
 
-List video devices:
+## Install Raspberry Pi dependencies
 
-```bash
-ls /dev/video*
-```
+Run these commands **on the Raspberry Pi terminal**, not directly in Windows PowerShell. If you use PowerShell on your PC, first connect to the Pi with SSH as described below.
 
-Install camera utilities and list camera names/devices:
-
-```bash
-sudo apt install v4l-utils -y
-v4l2-ctl --list-devices
-```
-
-The Logitech C925e was detected during development; `/dev/video0` successfully returned a frame. Device numbers may differ on other systems.
-
-## Install dependencies
+Update the package list:
 
 ```bash
 sudo apt update
-sudo apt install python3-opencv python3-numpy
 ```
 
-Check OpenCV:
+Install Python, pip, OpenCV, NumPy, and camera utilities:
 
 ```bash
-python3 -c "import cv2; print(cv2.__version__)"
+sudo apt install -y python3 python3-pip python3-opencv python3-numpy python3-requests v4l-utils
 ```
 
-## Run the detector
+Check that the required modules import correctly:
 
-Create the output folder:
+```bash
+python3 -c "import cv2, numpy, requests; print('OpenCV', cv2.__version__); print('Dependencies OK')"
+```
+
+Create the project folders:
 
 ```bash
 mkdir -p ~/roadbot/photos
 ```
 
-Copy `raspberry_pi/red_detect.py` from this repository to `~/roadbot/red_detect.py`, then run:
+---
+
+## Camera check
+
+List video devices:
+
+```bash
+ls -l /dev/video*
+```
+
+List cameras known to V4L2:
+
+```bash
+v4l2-ctl --list-devices
+```
+
+If the camera is not `/dev/video0`, edit `CAMERA` near the top of `red_detect.py` to use the correct device, for example `/dev/video2`.
+
+Make sure no other program is already using the webcam.
+
+---
+
+## Configure the Supabase robot key
+
+The script sends uploads to this Supabase Edge Function:
+
+```text
+https://iglcowsagtkasxwmsqvt.supabase.co/functions/v1/robot-upload
+```
+
+The server must already have this function deployed and configured to accept the `x-robot-key` header and the form fields used by the script.
+
+Create the private key file on the Raspberry Pi:
+
+```bash
+nano ~/.roadbot.env
+```
+
+Add this line, replacing the placeholder with the real robot upload key supplied by your project/backend administrator:
+
+```text
+ROBOT_UPLOAD_KEY=replace_with_your_real_robot_upload_key
+```
+
+Save in nano: press **Ctrl+O**, press **Enter**, then **Ctrl+X**.
+
+Restrict access to the file:
+
+```bash
+chmod 600 ~/.roadbot.env
+```
+
+Do not commit this key to GitHub, paste it into source code, or share it publicly. The Python script reads the key from `~/.roadbot.env`. If it is missing, image detection and local saving can still work, but uploads will fail until the key is configured.
+
+---
+
+## Copy the script from GitHub to the Pi
+
+### Option A — download the script directly
+
+On the Raspberry Pi, run:
+
+```bash
+mkdir -p ~/roadbot
+curl -L "https://raw.githubusercontent.com/Shanib-Muhammed/varoode-school-working-model/main/raspberry_pi/red_detect.py" -o ~/roadbot/red_detect.py
+```
+
+Check that the file exists:
+
+```bash
+ls -l ~/roadbot/red_detect.py
+```
+
+### Option B — clone the whole repository
+
+If Git is installed, you can clone the repository:
+
+```bash
+sudo apt install -y git
+git clone https://github.com/Shanib-Muhammed/varoode-school-working-model.git
+```
+
+The script will be at:
+
+```text
+varoode-school-working-model/raspberry_pi/red_detect.py
+```
+
+To run it from the repository folder:
+
+```bash
+python3 varoode-school-working-model/raspberry_pi/red_detect.py
+```
+
+If you specifically want the script at `~/roadbot/red_detect.py`, use Option A or copy it from the cloned repository:
+
+```bash
+mkdir -p ~/roadbot
+cp varoode-school-working-model/raspberry_pi/red_detect.py ~/roadbot/red_detect.py
+```
+
+---
+
+## Run RoadBot
+
+Run the script on the Raspberry Pi:
 
 ```bash
 python3 ~/roadbot/red_detect.py
 ```
 
-Show a red paper or red tape to the webcam. When red is detected, the terminal prints the saved image path. To list saved photos:
+The startup output should show the camera path, photo directory, configured coordinates, and whether the robot upload key was loaded. If the camera cannot open, check the device path and camera connection.
+
+When a red region stays visible for the required number of frames, the program prints the track ID, saved photo path, coordinates, and timestamp. It then attempts to upload the photo.
+
+### View saved photos and JSON reports
 
 ```bash
 ls -lh ~/roadbot/photos/
 ```
 
-Press `Ctrl+C` to stop the detector.
+Each successful local capture should have a JPEG and a matching JSON file, for example:
+
+```text
+crack_20261011_123456_123456.jpg
+crack_20261011_123456_123456.json
+```
+
+The JSON report contains the detection label, configured latitude and longitude, timestamp, and local photo path.
+
+### Stop the program
+
+- Press **Q** while the live preview window is selected.
+- Or press **Ctrl+C** in the terminal.
+
+---
+
+## If you use Windows PowerShell to connect to the Raspberry Pi
+
+PowerShell is running on your Windows PC; commands such as `sudo apt`, `ls /dev/video*`, and `python3 ~/roadbot/red_detect.py` are intended to run **after you log in to the Raspberry Pi's Linux shell**.
+
+From PowerShell, connect using the Pi's actual username and hostname or IP address:
+
+```powershell
+ssh <username>@<raspberry-pi-hostname-or-ip>
+```
+
+For example, if the Pi's username is `raspberrypi` and its reachable hostname is `raspberrypi.local`:
+
+```powershell
+ssh raspberrypi@raspberrypi.local
+```
+
+If that hostname cannot be resolved, use the Pi's IP address or fix hostname/network discovery first. After SSH connects, run the Linux commands in the sections above in the remote shell. The path `~/roadbot/red_detect.py` refers to the home directory of the Linux user logged in on the Pi, not a folder on Windows.
+
+---
 
 ## Configuration
 
-- Camera device: `/dev/video0`
-- Minimum contour area: `500` pixels
-- HSV red ranges: `[0, 100, 100]–[10, 255, 255]` and `[160, 100, 100]–[179, 255, 255]`
-- Output folder: `~/roadbot/photos/`
+These constants are near the top of `red_detect.py`:
 
-Lighting, camera settings, distance, and object size affect detection. Adjust `MIN_RED_AREA` and the HSV limits if false detections occur or red objects are missed.
+| Setting | Default | Meaning |
+|---|---:|---|
+| `CAMERA` | `/dev/video0` | Linux camera device |
+| `PHOTO_DIR` | `~/roadbot/photos` | Where JPEGs and JSON reports are saved |
+| `LATITUDE` | `10.7735` | Fixed example latitude; not live GPS |
+| `LONGITUDE` | `76.3775` | Fixed example longitude; not live GPS |
+| `MIN_RED_AREA` | `500` | Ignore smaller red contours |
+| `STABLE_FRAMES` | `3` | Frames required before capture |
+| `MATCH_DISTANCE` | `140` | Maximum centre-point distance for track matching, in pixels |
+| `TRACK_TIMEOUT` | `10.0` | Seconds a missing region is retained to reduce duplicate captures |
+| `UPLOAD_RETRY_SECONDS` | `10` | Wait between failed upload attempts |
+| `REQUEST_TIMEOUT` | `30` | HTTP request timeout in seconds |
 
-## Current limitations and planned work
+The two red HSV ranges are `[0, 100, 100]–[10, 255, 255]` and `[160, 100, 100]–[179, 255, 255]`. Lighting, camera exposure, distance, and object size affect results.
 
-- NEO-6M GPS integration is not included in this script yet.
-- Automatic website upload is not included yet.
-- GitHub Pages is a static website and cannot by itself securely receive uploads or store uploaded photos. A backend/storage service (for example, Supabase) is needed for photo and GPS reports.
-- Red-colour detection is a test proxy, not confirmed road-crack detection.
-- Startup-on-boot configuration has not been added yet.
+---
+
+## Troubleshooting
+
+### `ModuleNotFoundError: No module named 'cv2'`
+
+Run:
+
+```bash
+sudo apt install -y python3-opencv
+```
+
+### `No module named 'requests'`
+
+Run:
+
+```bash
+sudo apt install -y python3-requests
+```
+
+### `Cannot open camera: /dev/video0`
+
+Run `ls -l /dev/video*` and `v4l2-ctl --list-devices`. Set `CAMERA` to the correct device and check the USB connection.
+
+### `Robot key is missing`
+
+Check the file and variable spelling:
+
+```bash
+cat ~/.roadbot.env
+chmod 600 ~/.roadbot.env
+```
+
+Keep the key private. If it has been exposed publicly, rotate it in the backend.
+
+### Upload returns an HTTP error
+
+Check the internet connection, that the Supabase Edge Function is deployed, that the key matches the backend configuration, and that the function expects the form field names `latitude`, `longitude`, `detected_at`, `detection`, and `photo`.
+
+### Too many or too few detections
+
+Adjust `MIN_RED_AREA` and the HSV ranges. This changes red-colour filtering only; it does not make the program an AI crack detector.
+
+### Same region is captured again later
+
+Tracking is based on the detected region's centre point. If the camera moves, a region disappears longer than `TRACK_TIMEOUT`, or detections shift significantly, the same physical object may be treated as a new region. This lightweight tracker cannot guarantee perfect physical crack identity.
+
+---
+
+## Safety and limitations
+
+- The script uses **fixed example coordinates**, not a live GPS receiver.
+- A successful upload depends on the Supabase Edge Function and its authentication configuration.
+- Detection is based on **red colour**, not actual road-crack features. A trained model and labelled crack-image dataset are needed for real crack recognition.
+- The camera preview requires a graphical desktop session. If running over SSH without a display, `cv2.imshow` may fail; run it on the Pi desktop or configure a headless preview approach.
+- Test on a stationary setup before mounting the camera on a moving vehicle.
+- Do not operate a prototype on public roads without appropriate supervision and safety measures.
