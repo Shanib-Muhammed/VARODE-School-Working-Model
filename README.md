@@ -5,7 +5,7 @@ This repository contains two related prototypes:
 1. **ESP8266 autonomous slow car** — L298N motor driver, two DC motors, and HC-SR04 ultrasonic obstacle sensing.
 2. **Raspberry Pi RoadBot** — webcam-based red-colour region detection, local photo/report saving, and upload to a Supabase Edge Function.
 
-> **Important:** the camera script detects red-coloured regions. It is not a trained AI model that understands real road cracks. Coordinates are fixed example values until live GPS is connected.
+> **Important project status:** the camera script detects red-coloured regions, not real road cracks. The GPS wiring below is a reference for a future connection only. **Live GPS has not been implemented in the current Python script**; it still uses fixed example coordinates.
 
 ## Contents
 
@@ -69,11 +69,32 @@ The ESP8266 car-control sketch and Raspberry Pi camera script are separate progr
 - USB webcam compatible with Linux/V4L2 (default device: /dev/video0)
 - Internet connection for Supabase uploads
 - Suitable Raspberry Pi power supply
-- Optional GPS module for future live coordinates
+- Optional NEO-6M GPS module (wiring guide below; not yet integrated in code)
 
 A monitor and keyboard are optional. The current camera script runs without opening a live preview window and can be started from a terminal or SSH session.
 
-### What the script does
+### Raspberry Pi 3 → NEO-6M GPS module (wiring guide only)
+
+For a typical NEO-6M breakout board, connect the UART pins as follows:
+
+| NEO-6M pin | Raspberry Pi 3 connection |
+|---|---|
+| VCC | Voltage supported by your exact GPS breakout board; check its label/specification |
+| GND | GND — physical pin 6 |
+| TX | GPIO15 / RXD, physical pin 10 |
+| RX | GPIO14 / TXD, physical pin 8 (optional for basic GPS reading) |
+
+**Important wiring notes**
+- GPS TX goes to Pi RX; GPS RX goes to Pi TX. The serial data lines cross over.
+- Raspberry Pi GPIO UART pins use 3.3 V logic. Do not feed a 5 V UART signal into a Pi GPIO pin. Check the GPS breakout's logic-level specification and use a suitable level shifter if needed.
+- Connect the GPS and Raspberry Pi grounds together. Power the Pi off before wiring.
+- Physical pin numbers differ from GPIO numbers. Double-check the pinout before connecting.
+- UART setup may require enabling the serial port and disabling the serial login console in Raspberry Pi Configuration or `raspi-config`; menu names can vary by Raspberry Pi OS version.
+- GPS reception is generally better with a view of the sky and may take time to get a fix.
+
+**Current implementation status:** This is a wiring reference only. The current `red_detect.py` does **not** read `/dev/serial0`, parse GPS NMEA data, or use live GPS coordinates. It still uses `LATITUDE = 10.7735` and `LONGITUDE = 76.3775`. Connecting the module alone will not change the dashboard location; GPS support still needs to be added and tested in Python.
+
+### What the script currently does
 
 1. Reads webcam frames from /dev/video0.
 2. Converts each frame to HSV and checks two red-colour ranges.
@@ -272,6 +293,7 @@ ls -ld ~/roadbot
 
 ## Limitations and safety
 
+- GPS wiring is documented, but live GPS is **not implemented** in the current script.
 - Coordinates are hard-coded example values, not live GPS.
 - Upload success depends on the deployed Supabase Edge Function and matching key/header/form-field contract.
 - The detector finds red-coloured regions, not actual road cracks. Real crack recognition requires a suitable trained model and labelled dataset.
