@@ -182,24 +182,92 @@ Never commit this key to GitHub, put it in source code, or share it in a public 
 
 ---
 
-## Quick installation and run (copy/paste)
+## Quick installation and run — step by step
 
-Run these commands in the **Raspberry Pi terminal** (or an SSH terminal connected to the Pi), not Windows PowerShell.
+Follow these steps **on the Raspberry Pi 3 terminal**. If you connect remotely, use an SSH terminal connected to the Pi. Do not run Linux commands in Windows PowerShell.
 
-First, create the photo folder and download the latest script:
+### Step 1 — Install the required software
+
+Copy and run:
+
+~~~bash
+sudo apt update
+sudo apt install -y python3 python3-pip python3-opencv python3-numpy python3-requests v4l-utils
+~~~
+
+**What this does:**
+- `sudo apt update` refreshes the Raspberry Pi OS package list.
+- `python3` runs the Python program.
+- `python3-opencv` and `python3-numpy` process webcam images.
+- `python3-requests` sends photos and report data to the online server.
+- `v4l-utils` helps check whether the webcam is detected.
+
+### Step 2 — Create the folder for photos
 
 ~~~bash
 mkdir -p ~/roadbot/photos
+~~~
+
+This creates the `roadbot` folder in your Pi home directory and a `photos` folder inside it. The `-p` option avoids an error if the folders already exist.
+
+### Step 3 — Download the latest Python script
+
+~~~bash
 curl -L "https://raw.githubusercontent.com/Shanib-Muhammed/varoode-school-working-model/main/raspberry_pi/red_detect.py" -o ~/roadbot/red_detect.py
 ~~~
 
-Then start RoadBot:
+This downloads `red_detect.py` from the project's GitHub repository and saves it at `~/roadbot/red_detect.py`. Run this command again when you want to update the script.
+
+### Step 4 — Check that the webcam is connected
+
+~~~bash
+ls -l /dev/video*
+v4l2-ctl --list-devices
+~~~
+
+These commands show camera device files and detected video devices. The script expects `/dev/video0` by default. If no camera appears, check the USB connection and try another port.
+
+### Step 5 — Set up the upload key for the website
+
+Open the private configuration file:
+
+~~~bash
+nano ~/.roadbot.env
+~~~
+
+Add this line, replacing the example value with the real robot upload key configured for your backend:
+
+~~~text
+ROBOT_UPLOAD_KEY=replace_with_your_real_robot_upload_key
+~~~
+
+Save with **Ctrl+O**, press **Enter**, then exit with **Ctrl+X**. Protect the file:
+
+~~~bash
+chmod 600 ~/.roadbot.env
+~~~
+
+The key authorizes the robot to upload reports to the Supabase Edge Function. Do not share it or commit it to GitHub. If you have not configured the backend key, local photo detection may work but online uploads will fail.
+
+### Step 6 — Start RoadBot
 
 ~~~bash
 python3 ~/roadbot/red_detect.py
 ~~~
 
-Before expecting dashboard uploads, make sure you have configured `~/.roadbot.env` with the correct `ROBOT_UPLOAD_KEY` as explained in **Configure the robot upload key** below. Stop the script with **Ctrl+C**.
+The program should try to open the webcam, detect red-coloured regions, save photos/reports, and upload them when the key and backend are configured. Read the startup messages for errors.
+
+### Step 7 — Check saved photos
+
+Open a second terminal, or stop the program with **Ctrl+C**, then run:
+
+~~~bash
+ls -lh ~/roadbot/photos/
+~~~
+
+This lists photos and report files saved by the script. Stop RoadBot by pressing **Ctrl+C** in the terminal where it is running.
+
+**Important:** the current program detects red-coloured areas used as crack stand-ins; it is not a trained real-road-crack AI model. Coordinates are currently fixed in the script (`LATITUDE = 10.7735`, `LONGITUDE = 76.3775`); live GPS has not yet been implemented. Dashboard uploads also require a correctly configured upload key and a working deployed backend.
 
 ## Run RoadBot
 
