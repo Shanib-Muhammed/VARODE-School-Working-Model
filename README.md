@@ -182,6 +182,25 @@ Never commit this key to GitHub, put it in source code, or share it in a public 
 
 ---
 
+## Quick installation and run (copy/paste)
+
+Run these commands in the **Raspberry Pi terminal** (or an SSH terminal connected to the Pi), not Windows PowerShell.
+
+First, create the photo folder and download the latest script:
+
+~~~bash
+mkdir -p ~/roadbot/photos
+curl -L "https://raw.githubusercontent.com/Shanib-Muhammed/varoode-school-working-model/main/raspberry_pi/red_detect.py" -o ~/roadbot/red_detect.py
+~~~
+
+Then start RoadBot:
+
+~~~bash
+python3 ~/roadbot/red_detect.py
+~~~
+
+Before expecting dashboard uploads, make sure you have configured `~/.roadbot.env` with the correct `ROBOT_UPLOAD_KEY` as explained in **Configure the robot upload key** below. Stop the script with **Ctrl+C**.
+
 ## Run RoadBot
 
 Download the current script to the expected path:
