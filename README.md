@@ -24,8 +24,6 @@ Other guides in this README:
 
 ## ESP8266 car
 
-![ESP8266 autonomous car wiring diagram](assets/esp8266-car.svg)
-
 **Arduino sketch:** [esp8266_autonomous_car.ino](arduino/esp8266-autonomous-car/esp8266_autonomous_car.ino)
 
 ### Hardware
@@ -67,8 +65,6 @@ The ESP8266 car-control sketch and Raspberry Pi camera script are separate progr
 ---
 
 ## Raspberry Pi RoadBot
-
-![Raspberry Pi RoadBot diagram](assets/raspberry-pi-roadbot.svg)
 
 ### Hardware
 
@@ -398,8 +394,6 @@ ls -ld ~/roadbot
 ---
 
 ## Arduino Nano Smart Street Light Controller
-
-![Arduino Nano smart street-light diagram](assets/smart-street-light.svg)
 
 The Arduino street-light prototype uses an LDR to keep the LEDs off in daylight and two HC-SR04 ultrasonic sensors to run a nine-LED sequence at night.
 
