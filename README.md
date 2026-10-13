@@ -386,3 +386,79 @@ ls -ld ~/roadbot
 - The detector finds red-coloured regions, not actual road cracks. Real crack recognition requires a suitable trained model and labelled dataset.
 - The two-photo maximum is enforced per tracked ID. Large changes in camera viewpoint may cause the same physical marking to be assigned a new ID.
 - Test on a stationary setup first. Do not operate a prototype on public roads without appropriate supervision and safety measures.
+
+
+---
+
+## Arduino Nano Smart Street Light Controller
+
+The Arduino street-light prototype uses an LDR to keep the LEDs off in daylight and two HC-SR04 ultrasonic sensors to run a nine-LED sequence at night.
+
+### Hardware required
+
+- Arduino Nano
+- 2 × HC-SR04 ultrasonic sensors
+- 1 × LDR photoresistor
+- 1 × 10 kΩ resistor for the LDR voltage divider
+- 9 × LEDs
+- 9 × 220 Ω–330 Ω resistors (one resistor per LED)
+- Breadboard or prototype PCB, jumper wires, and a suitable USB/power supply
+
+### Wiring
+
+| Component | Signal | Arduino Nano |
+|---|---|---|
+| Ultrasonic sensor US1 | TRIG | D2 |
+| Ultrasonic sensor US1 | ECHO | D3 |
+| Ultrasonic sensor US2 | TRIG | D4 |
+| Ultrasonic sensor US2 | ECHO | D5 |
+| LED 1 | Anode through its resistor | D6 |
+| LED 2 | Anode through its resistor | D7 |
+| LED 3 | Anode through its resistor | D8 |
+| LED 4 | Anode through its resistor | D9 |
+| LED 5 | Anode through its resistor | D10 |
+| LED 6 | Anode through its resistor | D11 |
+| LED 7 | Anode through its resistor | D12 |
+| LED 8 | Anode through its resistor | D13 |
+| LED 9 | Anode through its resistor | A1 |
+| LDR divider output | Junction between LDR and 10 kΩ resistor | A0 |
+| All components | GND | Common GND |
+| Both HC-SR04 sensors | VCC | 5V (for typical HC-SR04 modules) |
+
+**LED polarity:** connect each LED's long leg (anode) to its assigned Arduino pin through an individual 220 Ω–330 Ω resistor. Connect each short leg (cathode) to GND. Do not connect LEDs directly to GPIO pins without resistors.
+
+**LDR divider:** connect 5V → LDR → A0 junction → 10 kΩ resistor → GND. With this arrangement, the analog reading usually rises in bright light and falls in darkness. The code uses `NIGHT_THRESHOLD = 400`; adjust it to suit your room/model.
+
+### Upload the sketch
+
+1. Install and open the Arduino IDE on your computer.
+2. Connect the Arduino Nano with a USB data cable.
+3. Open [SmartStreetLightController.ino](arduino/smart-street-light/SmartStreetLightController.ino).
+4. In **Tools → Board**, select **Arduino Nano**.
+5. In **Tools → Processor**, select the processor matching your Nano. Many classic Nano clones use **ATmega328P (Old Bootloader)**; if upload fails, try the other ATmega328P option.
+6. In **Tools → Port**, select the port for your Nano.
+7. Click **Verify**, then **Upload**.
+8. Optional: open **Tools → Serial Monitor** and select **9600 baud** to see sensor-event messages.
+
+### How it works
+
+- **Daylight:** all LEDs are turned off based on the LDR reading.
+- **At night, US1 detects an object within 5 cm:** LEDs 1 through 9 turn on one at a time.
+- **At night, US2 detects an object within 5 cm after the US1 sequence:** LEDs 1 through 9 turn off one at a time.
+- **At night, US2 detects an object within 5 cm first:** LEDs 9 through 1 turn on one at a time.
+- **At night, US1 detects an object within 5 cm after the reverse sequence:** LEDs 9 through 1 turn off one at a time.
+- A sensor is re-armed after the object moves to at least 8 cm away. This helps avoid repeatedly triggering while an object remains very close.
+- The LED step delay is 200 ms per LED.
+
+### Adjustments and troubleshooting
+
+The main settings are near the top of the sketch:
+
+- `NIGHT_THRESHOLD = 400`: adjust for your LDR and room brightness.
+- `DETECT_DISTANCE_CM = 5`: detection threshold in centimetres.
+- `RELEASE_DISTANCE_CM = 8`: distance required to re-arm the sensor.
+- `LED_STEP_MS = 200`: time between LED steps, in milliseconds.
+
+If only some LEDs work, first upload a simple LED test sketch and check each LED, its individual resistor, polarity, and pin connection. Verify that LED 9 is connected to A1 and that all grounds are connected together. D13 and A1 are valid output pins on a classic Arduino Nano. The sensor threshold cannot explain why particular LEDs fail in an independent LED test.
+
+**Safety and limitations:** test the model on a stable work surface. HC-SR04 readings can be less reliable at very short distances; if 5 cm is inconsistent, try 6–8 cm. The LDR threshold depends on the actual divider wiring and ambient light.
