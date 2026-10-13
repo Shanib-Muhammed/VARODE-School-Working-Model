@@ -481,3 +481,43 @@ The main settings are near the top of the sketch:
 If only some LEDs work, first upload a simple LED test sketch and check each LED, its individual resistor, polarity, and pin connection. Verify that LED 9 is connected to A1 and that all grounds are connected together. D13 and A1 are valid output pins on a classic Arduino Nano. The sensor threshold cannot explain why particular LEDs fail in an independent LED test.
 
 **Safety and limitations:** test the model on a stable work surface. HC-SR04 readings can be less reliable at very short distances; if 5 cm is inconsistent, try 6–8 cm. The LDR threshold depends on the actual divider wiring and ambient light.
+
+---
+
+## Arduino landscape disaster monitoring system
+
+This is an educational demonstration model that monitors soil moisture and rain conditions using an Arduino UNO and displays the status on a 0.96-inch SSD1306 OLED. An ESP8266 can optionally be added to send phone alerts over Wi-Fi.
+
+### Hardware
+
+- Arduino UNO
+- 0.96-inch SSD1306 OLED (128 × 64, I²C-compatible display operated here using software I²C)
+- Soil-moisture sensor
+- Rain sensor
+- Optional NodeMCU ESP8266 for internet/phone notifications
+- Jumper wires and a suitable USB/power supply
+
+### Arduino UNO wiring
+
+| Component pin | Arduino UNO connection |
+|---|---|
+| OLED SDA | D2 |
+| OLED SCL | D3 |
+| Soil sensor AO | A0 |
+| Rain sensor AO | A1 |
+| All sensor grounds | GND |
+| Sensor power | Use the voltage supported by the exact sensor module |
+
+The OLED sketch uses the U8g2 library. Install **U8g2** in Arduino IDE Library Manager, open [landscape_disaster_monitor.ino](arduino/landscape-disaster-monitor/landscape_disaster_monitor.ino), select **Arduino UNO**, choose the correct port, and upload.
+
+### Status and thresholds
+
+The sketch estimates soil moisture and rain-sensor wetness from analog readings and shows a status on the OLED. Its calibration values (SOIL_DRY, SOIL_WET, RAIN_DRY, and RAIN_WET) are example starting points only. Read the actual dry and wet values in your setup and adjust these constants before the exhibition. The current 50% warning thresholds are demonstration settings, not scientifically validated disaster thresholds.
+
+### Optional ESP8266 phone alerts
+
+The ESP8266 can connect the model to Wi-Fi and send a notification when the Arduino detects a warning. A Telegram bot is one possible method; a mobile dashboard or the project's website can also be used. This requires extra ESP8266 communication code and internet/service configuration—the current Arduino sketch does **not** yet send phone alerts by itself. Do not connect the UNO's 5 V logic directly to ESP8266 GPIO pins; ESP8266 GPIO is 3.3 V-only. Use a suitable level shifter or voltage divider for any UNO-to-ESP8266 signal, and connect GND together.
+
+### Limitations and safety
+
+This is a school demonstration prototype, not a certified landslide or flood prediction system. Soil moisture and rain readings alone cannot reliably predict a real disaster. Use official local warnings for real-world safety decisions. A water-level sensor and MPU6050 tilt sensor are not included in the current sketch.
