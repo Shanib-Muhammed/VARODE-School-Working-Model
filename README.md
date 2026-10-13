@@ -432,6 +432,22 @@ The Arduino street-light prototype uses an LDR to keep the LEDs off in daylight 
 
 **LDR divider:** connect 5V → LDR → A0 junction → 10 kΩ resistor → GND. With this arrangement, the analog reading usually rises in bright light and falls in darkness. The code uses `NIGHT_THRESHOLD = 400`; adjust it to suit your room/model.
 
+### Optional: change the LDR behavior for your exhibition
+
+The prototype can be adjusted later without changing the wiring, provided the LDR is connected to A0 and the reading is being interpreted correctly. For your current school submission, you can keep the behavior that is already working. If you want the street lights to turn **ON in darkness and OFF in the morning/daylight**, use the normal night condition:
+
+```cpp
+bool isNight = (lightValue < NIGHT_THRESHOLD);
+```
+
+If your current prototype instead turns LEDs **ON in bright morning light and OFF in darkness**, you can try reversing the comparison:
+
+```cpp
+bool isNight = (lightValue > NIGHT_THRESHOLD);
+```
+
+Choose the condition that matches your actual LDR wiring and readings. With the documented wiring above, the first condition is normally correct; if the behavior is reversed, check the voltage-divider wiring and print `lightValue` to the Serial Monitor before changing the condition. To adjust when it switches between day and night, change `NIGHT_THRESHOLD` (currently `400`) and test—for example, try `500`, then tune it based on the readings. After editing the sketch, click **Verify** and **Upload** in Arduino IDE. These are optional settings, so you can leave the working prototype unchanged for the morning demonstration and change them later if needed.
+
 ### Upload the sketch
 
 1. Install and open the Arduino IDE on your computer.
