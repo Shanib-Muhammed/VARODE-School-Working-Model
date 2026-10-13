@@ -9,19 +9,22 @@ This repository contains two related prototypes:
 
 ## Contents
 
-- ESP8266 car
-- Raspberry Pi RoadBot
-- Install dependencies
-- Configure the robot upload key
-- Run RoadBot
-- How the two-photo limit works
-- Configuration
-- Troubleshooting
-- Limitations and safety
+| Project folder / file | Description |
+|---|---|
+| [arduino/esp8266-autonomous-car](arduino/esp8266-autonomous-car/) | ESP8266 autonomous car — Arduino sketch and obstacle-avoidance code |
+| [arduino/smart-street-light](arduino/smart-street-light/) | Arduino Nano smart street-light controller |
+| [raspberry_pi](raspberry_pi/) | Raspberry Pi RoadBot camera detection and upload code |
+
+Other guides in this README:
+- ESP8266 car wiring and setup
+- Raspberry Pi RoadBot installation and configuration
+- Upload troubleshooting and project limitations
 
 ---
 
 ## ESP8266 car
+
+**Arduino sketch:** [esp8266_autonomous_car.ino](arduino/esp8266-autonomous-car/esp8266_autonomous_car.ino)
 
 ### Hardware
 
