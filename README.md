@@ -484,18 +484,21 @@ If only some LEDs work, first upload a simple LED test sketch and check each LED
 
 ---
 
-## Arduino landscape disaster monitoring system
+## Arduino landscape disaster management system
 
-This is an educational demonstration model that monitors soil moisture and rain conditions using an Arduino UNO and displays the status on a 0.96-inch SSD1306 OLED. An ESP8266 can optionally be added to send phone alerts over Wi-Fi.
+This Arduino UNO prototype monitors rain, soil moisture, and ground tilt for a school-exhibition demonstration. It displays separate **HEAVY RAIN ALERT!** and **LANDSLIDE ALERT!** messages on a 128 × 64 SSD1306 OLED, activates a buzzer for either alert, and controls a servo road barrier. An HC-SR04 detects nearby objects for the barrier's existing open/clear-timer behavior.
 
 ### Hardware
 
 - Arduino UNO
-- 0.96-inch SSD1306 OLED (128 × 64, I²C-compatible display operated here using software I²C)
-- Soil-moisture sensor
-- Rain sensor
-- Optional NodeMCU ESP8266 for internet/phone notifications
-- Jumper wires and a suitable USB/power supply
+- SSD1306 OLED, 128 × 64
+- Analog soil-moisture sensor
+- Analog rain sensor
+- MPU6050 / GY-521 accelerometer module
+- HC-SR04 ultrasonic sensor
+- Servo motor for the model barrier
+- Active buzzer (or a buzzer module compatible with the output)
+- Jumper wires and a suitable power supply
 
 ### Arduino UNO wiring
 
@@ -505,14 +508,27 @@ This is an educational demonstration model that monitors soil moisture and rain 
 | OLED SCL | D3 |
 | Soil sensor AO | A0 |
 | Rain sensor AO | A1 |
-| All sensor grounds | GND |
-| Sensor power | Use the voltage supported by the exact sensor module |
+| MPU6050 SDA | A4 |
+| MPU6050 SCL | A5 |
+| Buzzer signal | D8 |
+| HC-SR04 TRIG | D6 |
+| HC-SR04 ECHO | D7 |
+| Servo signal | D9 |
+| Sensor/module grounds | Common GND |
 
-The OLED sketch uses the U8g2 library. Install **U8g2** in Arduino IDE Library Manager, open [landscape_disaster_monitor.ino](arduino/landscape-disaster-monitor/landscape_disaster_monitor.ino), select **Arduino UNO**, choose the correct port, and upload.
+Use the voltage supported by each module. The servo may need a separate suitable power supply; connect its ground to Arduino GND. Avoid powering a high-current servo from the UNO's 5 V pin if it causes resets. Install **U8g2** in Arduino IDE Library Manager, then open [landscape_disaster_monitor.ino](arduino/landscape-disaster-monitor/landscape_disaster_monitor.ino), select **Arduino UNO**, select the correct port, and upload. Open Serial Monitor at **9600 baud**.
 
-### Status and thresholds
+### Alert and barrier behavior
 
-The sketch estimates soil moisture and rain-sensor wetness from analog readings and shows a status on the OLED. Its calibration values (SOIL_DRY, SOIL_WET, RAIN_DRY, and RAIN_WET) are example starting points only. Read the actual dry and wet values in your setup and adjust these constants before the exhibition. The current 50% warning thresholds are demonstration settings, not scientifically validated disaster thresholds.
+- **Rain sensor only:** OLED shows `HEAVY RAIN ALERT!`; buzzer turns on and the barrier alert logic activates.
+- **Soil-moisture warning or MPU6050 tilt warning:** OLED shows `LANDSLIDE ALERT!`; buzzer turns on and the barrier alert logic activates.
+- **Both rain and landslide conditions:** landslide alert has display priority.
+- **No active warning:** OLED shows `SYSTEM NORMAL`, buzzer turns off, and the barrier returns to open.
+- The HC-SR04 behavior is retained: if an object is detected within 5 cm during an alert, the barrier opens; after the object leaves, the code starts a 3-second timer and then closes the barrier if the alert remains active.
+
+### Calibration and thresholds
+
+The sketch starts with `SOIL_DRY = 800`, `SOIL_WET = 350`, `RAIN_DRY = 900`, and `RAIN_WET = 300`. Soil and rain warning thresholds are both 50%, and the tilt threshold is 15 degrees from the MPU6050's startup reference orientation. These are demonstration settings, not scientifically validated disaster thresholds. Keep the model still during startup calibration, and adjust the dry/wet values to match your actual sensor readings.
 
 ### Optional ESP8266 phone alerts
 
